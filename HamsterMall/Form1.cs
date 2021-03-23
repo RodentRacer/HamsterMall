@@ -317,7 +317,7 @@ namespace HamsterMall
 
                     g.diffuse = Primitive.Material?.Channels?.First(channel => channel.Key == "BaseColor").Parameter ?? Vector4.One;
                     
-                    g.diffuse = Primitive.Material?.Channels?.First(channel => channel.Key == "Emission").Parameter ?? Vector4.Zero;
+                    g.emissive = Primitive.Material?.Channels?.First(channel => channel.Key == "Emission").Parameter ?? Vector4.Zero;
                     
                     var texture = Primitive.Material?.Channels?.FirstOrDefault(channel => channel.Key == "BaseColor").Texture;
                     if (texture != null)
