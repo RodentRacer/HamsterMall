@@ -203,9 +203,9 @@ namespace HamsterMall
             writer.Write(195.976226806641f);
             writer.Write(419.277282714844f);
             writer.Write(24.076717376709f);
-            writer.Write(1.0f);
-            writer.Write(1.0f);
-            writer.Write(1.0f);
+            writer.Write(0.0f);
+            writer.Write(0.0f);
+            writer.Write(0.0f);
         }
 
         private void WriteBackgroundAndAmbient(CustomWriter writer)
