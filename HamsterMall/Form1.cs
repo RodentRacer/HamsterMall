@@ -21,7 +21,7 @@ namespace HamsterMall
 
         public Vertex Converted()
         {
-            return new Vertex { X = X * 50.0f, Y = Y * 50.0f, Z = -Z * 50.0f, NX = NX, NY = NY, NZ = -NZ, U = U, V = V }; 
+            return new Vertex { X = X * 50.0f, Y = Y * 50.0f, Z = -Z * 50.0f, NX = NX, NY = NY, NZ = -NZ, U = U, V = V };
         }
     }
 
@@ -49,6 +49,12 @@ namespace HamsterMall
     {
         public int triangleCount;
         public int vertexOffset;
+    }
+
+    struct spline
+    {
+        public string name;
+        public List<Vertex> points;
     }
 
     public partial class HamsterMall : Form
@@ -141,30 +147,145 @@ namespace HamsterMall
 
         private void WriteRefPoints(CustomWriter writer, ModelRoot model)
         {
-
-            var Nodes = model.LogicalNodes.Where(node =>
-                node.Name.StartsWith("START") ||
-                node.Name.StartsWith("SAFESPOT") || 
-                node.Mesh == null
-            ).ToList();
+            var Nodes = new List<Node>();
+            foreach(Node node in model.LogicalNodes)
+            {
+                if (!node.Name.StartsWith("C:") && !node.Name.StartsWith("Light") && !node.Name.StartsWith("Direction"))
+                {
+                    if (node.VisualParent == null || !node.VisualParent.Name.StartsWith("C:"))
+                    {
+                        if (node.Mesh == null || node.Name.StartsWith("REF:"))
+                        {
+                            Nodes.Add(node);
+                        }
+                    }
+                }
+            }
 
             writer.Write(Nodes.Count);
 
             foreach (var node in Nodes)
             {
                 int length = node.Name.LastIndexOf(".");
+                int startLength = 0;
+                bool REF = false;
+
+                if (node.Name.StartsWith("REF:"))
+                {
+                    startLength = 4;
+                    if (node.Name.StartsWith("REF:FLAG") || node.Name.StartsWith("REF:BRIDGE") || node.Name.StartsWith("REF:SMALLFLAG"))
+                    {
+                        REF = true;
+                    }
+                }
+                
                 length = length == -1 ? node.Name.Length : length;
 
-                writer.Write(node.Name.Substring(0, length));
+                writer.Write(node.Name.Substring(startLength, length-startLength));
                 writer.Write(node.WorldMatrix.Translation.X * 50.0f);
                 writer.Write(node.WorldMatrix.Translation.Y * 50.0f);
                 writer.Write(-node.WorldMatrix.Translation.Z * 50.0f);
 
-                writer.Write(0.0f);
-                writer.Write(0.0f);
-                writer.Write(0.0f);
+                //This is all code translating the quaternion rotation format into the Euler format
+                if(true)
+                {
+                    
+                    double rY = node.LocalTransform.Rotation.X;
+                    double rX = node.LocalTransform.Rotation.Y;
+                    double rZ = -node.LocalTransform.Rotation.Z;
+                    double rW = node.LocalTransform.Rotation.W;
 
-                writer.Write(0);
+                    double RotX = 0;
+                    double RotY = 0;
+                    double RotZ = 0;
+
+                    if (1 - 2 * (rX * rX + rY * rY) != 0)
+                    {
+                        RotY = 180 * Math.Atan2(2 * (rW * rX + rY * rZ), (1 - 2 * (rX * rX + rY * rY))) / Math.PI;
+                    }
+
+                    if (1 - 2 * (rY * rY + rZ * rZ) != 0)
+                    {
+                        RotZ = 180 * Math.Atan2(2 * (rW * rZ + rX * rY), (1 - 2 * (rY * rY + rZ * rZ))) / Math.PI;
+                    }
+                    RotX = 180 * Math.Asin(2 * (rW * rY - rZ * rX)) / Math.PI;
+
+                    if (Double.IsNaN(RotY))
+                    {
+                        if (rW * rY - rZ * rX > 0)
+                        {
+                            RotY = 90;
+                        }
+                        else
+                        {
+                            RotY = -90;
+                        }
+                    }
+                    writer.Write((float)RotZ);//Rotation Z
+                    writer.Write((float)RotY);//Rotation Y
+                    writer.Write((float)RotX);//Rotation X
+                }
+                //End of code to write rotation
+
+                
+                if (REF)
+                {
+                    writer.Write(1); //Has color
+
+                    writer.Write(0.9921f);
+                    writer.Write(0.9921f);
+                    writer.Write(0.9921f);
+                    writer.Write(1f);
+
+                    writer.Write(0.9921f);
+                    writer.Write(0.9921f);
+                    writer.Write(0.9921f);
+                    writer.Write(1f);
+
+                    writer.Write(0);
+                    writer.Write(0);
+                    writer.Write(0);
+                    writer.Write(1f);
+
+                    writer.Write(0);
+                    writer.Write(0);
+                    writer.Write(0);
+                    writer.Write(1f);
+
+                    writer.Write(10f); // power?
+                    writer.Write(0); //has reflection
+
+                    var Primitive = node.Mesh.Primitives;
+                    var texture = Primitive[0].Material?.Channels?.FirstOrDefault(channel => channel.Key == "BaseColor").Texture;
+                    if (texture != null)
+                    {
+                        writer.Write(1); //has image
+                        string texture2 = texture.PrimaryImage.Name;
+                        if (!texture2.EndsWith(".bmp") && !texture2.EndsWith(".png"))
+                        {
+                            if (texture.PrimaryImage.Name == "BlueChecker" || texture.PrimaryImage.Name == "BrightGreenChecker" || texture.PrimaryImage.Name == "GreenChecker" || texture.PrimaryImage.Name == "OrangeChecker" || texture.PrimaryImage.Name == "PinkChecker" || texture.PrimaryImage.Name == "PurpleChecker" || texture.PrimaryImage.Name == "RedChecker")
+                            {
+                                texture2 = texture.PrimaryImage.Name + ".bmp";
+                            }
+                            else
+                            {
+                                texture2 = texture.PrimaryImage.Name + ".png";
+                            }
+                        }
+                        else 
+                        {
+                            texture2 = texture.PrimaryImage.Name;
+                        }
+                        
+                        
+                        
+                        writer.Write(texture2 ?? "");
+                    }
+                }
+                else
+                {
+                    writer.Write(0);//Does not have color
+                }
             }
 
 
@@ -174,38 +295,112 @@ namespace HamsterMall
 
         private void WriteSplines(CustomWriter writer, ModelRoot model)
         {
-            //List<Node> CameraSpline = model.LogicalNodes.Where(Node => Node.VisualParent?.Name == "CameraLocus").OrderBy(Node => Node.Name).ToList();
+            
+            List<spline> Splines = new List<spline>();
+            foreach (var Node in model.LogicalNodes)
+            {
+                if(Node.Name.StartsWith("C:"))
+                {
+                    spline spline = new spline();
+                    spline.name = Node.Name;
+                    spline.points = new List<Vertex>();
+                    List<Node> ChildNodes = model.LogicalNodes.Where(item => item.VisualParent?.Name == spline.name).OrderBy(item => item.Name).ToList();
+                    if(ChildNodes.Count == 0 && Node.Mesh != null)
+                    {
+                        foreach (MeshPrimitive Primitive in Node.Mesh.Primitives)
+                        {
+                            GetVertexBuffer(Primitive, out List<Vector3> Vertices);
+                            Vertices.OrderBy(Vertex => -Vertex.Y);
+                            foreach(Vector3 vertex in Vertices)
+                            {
+                                //convert to proper coordinates
+                                Vector3 RPos = vertex; //Relative position to node
+                                Vector3 NPos = Node.WorldMatrix.Translation; //Node position
+                                Vector3 Pos = RPos + NPos; //Real position
+                                Vertex v = new Vertex { X = Pos.X, Y = Pos.Y, Z = Pos.Z }.Converted();
+                                
+                                //add to spline.points
+                                spline.points.Add(v);
+                            }
+                            
+                        }
+                        Splines.Add(spline);
+                    }
+                    else if (ChildNodes.Count != 0)
+                    {
+                        foreach(Node node in ChildNodes)
+                        {
+                            //convert nodes to vertices
+                            Vector3 Pos = node.WorldMatrix.Translation;
+                            Vertex v = new Vertex { X = Pos.X, Y = Pos.Y, Z = Pos.Z }.Converted();
 
-            //writer.Write(1);
-            //writer.Write("CameraLocus");
-            //writer.Write(CameraSpline.Count);
-
-            //foreach(Node node in CameraSpline)
-            //{
-            //    Vector3 Pos = node.WorldMatrix.Translation;
-            //    Vertex v = new Vertex { X = Pos.X, Y = Pos.Y, Z = Pos.Z }.Converted();
-            //    writer.Write(v.X);
-            //    writer.Write(v.Y);
-            //    writer.Write(v.Z);
-            //}
+                            //add to spline.points
+                            spline.points.Add(v);
+                        }
+                        Splines.Add(spline);
+                    }
+                    
+                    
+                }
+            }
+            writer.Write(Splines.Count);//number of splines
+            foreach (var spline in Splines)
+            {
+                int length = spline.name.Length;
+                writer.Write(spline.name.Substring(2, length-2));//name of spline
+                writer.Write(spline.points.Count);//number of points on spline
+                foreach(Vertex v in spline.points)
+                {
+                    writer.Write(v.X);
+                    writer.Write(v.Y);
+                    writer.Write(v.Z);
+                }
+            }
+            
 
             //No need to write a spline apparently the camera just follows if i don't populate this at all
-            writer.Write(0);
+            //writer.Write(0);
         }
 
         private void WriteLights(CustomWriter writer, ModelRoot model)
         {
-            writer.Write(1);
-            writer.Write(0);
-            writer.Write(350.671691894531f);
-            writer.Write(525.585083007812f);
-            writer.Write(76.9814834594727f);
-            writer.Write(195.976226806641f);
-            writer.Write(419.277282714844f);
-            writer.Write(24.076717376709f);
-            writer.Write(0.0f);
-            writer.Write(0.0f);
-            writer.Write(0.0f);
+            
+            
+            List<Vertex> Lights = new List<Vertex>();
+            List<Vertex> Directions = new List<Vertex>();
+            foreach (var Node in model.LogicalNodes.OrderBy(node => node.Name))
+            {
+                if (Node.Name.StartsWith("Light"))
+                {
+                    Vector3 Pos = Node.WorldMatrix.Translation;
+                    Vertex Light = new Vertex { X = Pos.X, Y = Pos.Y, Z = Pos.Z }.Converted();
+                    Lights.Add(Light);
+                }
+                else if (Node.Name.StartsWith("Direction"))
+                {
+                    Vector3 Pos = Node.WorldMatrix.Translation;
+                    Vertex Direction = new Vertex { X = Pos.X, Y = Pos.Y, Z = Pos.Z }.Converted();
+                    Directions.Add(Direction);
+                }
+            }
+
+            int LightCount = Lights.Count;
+            writer.Write(LightCount);
+            
+            for (int i = 1; i <= LightCount; i++)
+            {
+                writer.Write(0);
+                writer.Write(Lights[i - 1].X);
+                writer.Write(Lights[i - 1].Y);
+                writer.Write(Lights[i - 1].Z);
+                writer.Write(Directions[i - 1].X);
+                writer.Write(Directions[i - 1].Y);
+                writer.Write(Directions[i - 1].Z);
+                writer.Write(1.0f);
+                writer.Write(1.0f);
+                writer.Write(1.0f);
+            }
+            
         }
 
         private void WriteBackgroundAndAmbient(CustomWriter writer)
@@ -258,13 +453,104 @@ namespace HamsterMall
 
                 foreach(geom g in m.geoms)
                 {
-                    writer.Write(m.name ?? "");
-                    writer.Write(Vector4.Zero);//ambient
-                    writer.Write(g.diffuse);//diffuse
-                    writer.Write(Vector4.One / 4.0f);//spec
-                    writer.Write(g.emissive);//emissive
-                    writer.Write(1.0f); // power?
-                    writer.Write(1); //has reflection
+                    int length = m.name.LastIndexOf(".");
+                    length = length == -1 ? m.name.Length : length;
+                    writer.Write(m.name.Substring(0,length));
+                    //If there is no emission property
+                    if (g.emissive == Vector4.Zero || g.emissive == new Vector4(0,0,0,1))
+                    {
+                        if (m.name.StartsWith("T:") && m.name != "T:GOALAREA" && g.texture != "OddArrow.png" && g.texture != "YellowArrow.png")
+                        {
+                            writer.Write(1.0f);
+                            writer.Write(1.0f);
+                            writer.Write(1.0f);
+                            writer.Write(0.5f);//ambient
+                            writer.Write(1.0f);
+                            writer.Write(1.0f);
+                            writer.Write(1.0f);
+                            writer.Write(0.5f);//diffuse
+                            writer.Write(g.specular);
+                            writer.Write(g.emissive);
+                        }
+                        else
+                        {
+                            //writer.Write(Vector4.Zero);//ambient
+                            writer.Write(g.diffuse);//ambient
+                            writer.Write(g.diffuse);//diffuse
+                            writer.Write(g.specular);//spec
+                            writer.Write(g.emissive);//emissive
+                        }
+                    }
+                    else //if there is an emission property
+                    {
+                        if (m.name.StartsWith("T:") && g.texture != null)
+                        {
+                            if(g.texture == "Decal_Start.png")
+                            {
+                                writer.Write(g.diffuse);//ambient
+                                writer.Write(g.diffuse);//diffuse
+                                writer.Write(g.specular);
+                                writer.Write(g.emissive);
+                            }
+                            else if (g.texture == "goal.png" || g.texture == "goal-round.png")
+                            {
+                                writer.Write(g.emissive);//ambient
+                                writer.Write(g.emissive);//diffuse
+                                writer.Write(g.specular);
+                                writer.Write(g.emissive);
+                            }
+                            else if (g.texture == "Decal_Warning.png")
+                            {
+                                writer.Write(0.5882353186607361f);
+                                writer.Write(0.5882353186607361f);
+                                writer.Write(0.5882353186607361f);
+                                writer.Write(1f);//ambient
+                                writer.Write(0.5882353186607361f);
+                                writer.Write(0.5882353186607361f);
+                                writer.Write(0.5882353186607361f);
+                                writer.Write(1f);//diffuse
+                                writer.Write(g.specular);
+                                writer.Write(0.9921569228172302f);
+                                writer.Write(0.9921569228172302f);
+                                writer.Write(0.9921569228172302f);
+                                writer.Write(1f);//emissive
+                                
+                            }
+                            else if (g.texture == "NeonArrow.png")
+                            {
+                                writer.Write(0.988235354423523f);
+                                writer.Write(1f);
+                                writer.Write(0);
+                                writer.Write(0.75f);//ambient
+                                writer.Write(0.988235354423523f);
+                                writer.Write(1f);
+                                writer.Write(0);
+                                writer.Write(0.75f);//diffuse
+                                writer.Write(g.specular);
+                                writer.Write(g.emissive.X);
+                                writer.Write(g.emissive.Y);
+                                writer.Write(g.emissive.Z);
+                                writer.Write(0.75f);
+                            }
+                            else
+                            {
+                                writer.Write(g.diffuse);//ambient
+                                writer.Write(g.diffuse);//diffuse
+                                writer.Write(g.specular);//spec
+                                writer.Write(g.emissive);//emissive
+                            }
+                        }
+                        else
+                        {
+                            //writer.Write(Vector4.Zero);//ambient
+                            writer.Write(g.diffuse);//ambient
+                            writer.Write(g.diffuse);//diffuse
+                            writer.Write(g.specular);//spec
+                            writer.Write(g.emissive);//emissive
+                        }
+                    }
+                    writer.Write(10f); // power?
+                    writer.Write(0); //has reflection
 
                     if (g.texture != null)
                     {
@@ -305,53 +591,87 @@ namespace HamsterMall
                     continue;
                 }
 
-                Mesh Mesh = Node.Mesh;
-
-                mesh m = new mesh();
-                m.name = Mesh.Name;
-                m.geoms = new List<geom>();
-                foreach (MeshPrimitive Primitive in Mesh.Primitives)
+                if (!Node.Name.StartsWith("REF:") && !Node.Mesh.Name.StartsWith("C:") && !Node.Name.StartsWith("C:"))
                 {
-                    geom g = new geom();
-                    g.strips = new List<strip>();
 
-                    g.diffuse = Primitive.Material?.Channels?.First(channel => channel.Key == "BaseColor").Parameter ?? Vector4.One;
-                    
-                    g.emissive = Primitive.Material?.Channels?.First(channel => channel.Key == "Emissive").Parameter ?? Vector4.Zero;
-                    
-                    var texture = Primitive.Material?.Channels?.FirstOrDefault(channel => channel.Key == "BaseColor").Texture;
-                    if (texture != null)
+                    Mesh Mesh = Node.Mesh;
+
+                    mesh m = new mesh();
+                    m.name = Node.Name;
+                    m.geoms = new List<geom>();
+                    foreach (MeshPrimitive Primitive in Mesh.Primitives)
                     {
-                        g.texture = texture.PrimaryImage.Name + ".png";
+                        geom g = new geom();
+                        g.strips = new List<strip>();
+
+                        g.diffuse = Primitive.Material?.Channels?.First(channel => channel.Key == "BaseColor").Parameter ?? Vector4.One;
+
+                        g.emissive = Primitive.Material?.Channels?.First(channel => channel.Key == "Emissive").Parameter ?? Vector4.Zero;
+
+                        g.specular = Vector4.Zero;
+
+                        var texture = Primitive.Material?.Channels?.FirstOrDefault(channel => channel.Key == "BaseColor").Texture;
+                        if (texture != null)
+                        {
+                            if (!texture.PrimaryImage.Name.EndsWith(".png") && !texture.PrimaryImage.Name.EndsWith(".bmp"))
+                            {
+                                if (texture.PrimaryImage.Name == "BlueChecker" || texture.PrimaryImage.Name == "BrightGreenChecker" || texture.PrimaryImage.Name == "GreenChecker" || texture.PrimaryImage.Name == "OrangeChecker" || texture.PrimaryImage.Name == "PinkChecker" || texture.PrimaryImage.Name == "PurpleChecker" || texture.PrimaryImage.Name == "RedChecker")
+                                {
+                                    g.texture = texture.PrimaryImage.Name + ".bmp";
+                                }
+                                else
+                                {
+                                    g.texture = texture.PrimaryImage.Name + ".png";
+                                }
+                            }
+                            else 
+                            {
+                                g.texture = texture.PrimaryImage.Name;
+                            }
+                            
+                        }
+
+                        GetVertexBuffer(Primitive, out List<Vector3> Vertices);
+                        GetNormalBuffer(Primitive, out List<Vector3> Normals);
+                        GetTexCoordBuffer(Primitive, out List<Vector2> Uvs);
+                        Vector3[] vs = Vertices.ToArray();
+                        Vector3[] ns = Normals.ToArray();
+                        Vector2[] uvs = null;
+                        if (texture != null)
+                        {
+                            uvs = Uvs.ToArray();
+                        }
+                        GetIndexBuffer(Primitive, out List<(int A, int B, int C)> Indices);
+
+                        //TODO stripify triangles
+
+
+                        foreach (var tri in Indices)
+                        {
+                            g.strips.Add(new strip { triangleCount = 1, vertexOffset = verts.Count });
+                            Vector4 PosC = new Vector4(vs[tri.C].X, vs[tri.C].Y, vs[tri.C].Z, 1);
+                            Vector4 PosB = new Vector4(vs[tri.B].X, vs[tri.B].Y, vs[tri.B].Z, 1);
+                            Vector4 PosA = new Vector4(vs[tri.A].X, vs[tri.A].Y, vs[tri.A].Z, 1);
+                            PosC = Vector4.Transform(PosC, Node.WorldMatrix);
+                            PosB = Vector4.Transform(PosB, Node.WorldMatrix);
+                            PosA = Vector4.Transform(PosA, Node.WorldMatrix);
+                            if (texture != null)
+                            {
+                                verts.Add(new Vertex { X = PosC.X, Y = PosC.Y, Z = PosC.Z, NX = ns[tri.C].X, NY = ns[tri.C].Y, NZ = ns[tri.C].Z, U = uvs[tri.C].X, V = uvs[tri.C].Y }.Converted());
+                                verts.Add(new Vertex { X = PosB.X, Y = PosB.Y, Z = PosB.Z, NX = ns[tri.B].X, NY = ns[tri.B].Y, NZ = ns[tri.B].Z, U = uvs[tri.B].X, V = uvs[tri.B].Y }.Converted());
+                                verts.Add(new Vertex { X = PosA.X, Y = PosA.Y, Z = PosA.Z, NX = ns[tri.A].X, NY = ns[tri.A].Y, NZ = ns[tri.A].Z, U = uvs[tri.A].X, V = uvs[tri.A].Y }.Converted());
+                            }
+                            else
+                            {
+                                verts.Add(new Vertex { X = PosC.X, Y = PosC.Y, Z = PosC.Z, NX = ns[tri.C].X, NY = ns[tri.C].Y, NZ = ns[tri.C].Z, U = 1.0f, V = 1.0f }.Converted());
+                                verts.Add(new Vertex { X = PosB.X, Y = PosB.Y, Z = PosB.Z, NX = ns[tri.B].X, NY = ns[tri.B].Y, NZ = ns[tri.B].Z, U = 1.0f, V = 1.0f }.Converted());
+                                verts.Add(new Vertex { X = PosA.X, Y = PosA.Y, Z = PosA.Z, NX = ns[tri.A].X, NY = ns[tri.A].Y, NZ = ns[tri.A].Z, U = 1.0f, V = 1.0f }.Converted());
+                            }
+                        }
+                        m.geoms.Add(g);
                     }
-
-                    GetVertexBuffer(Primitive, out List<Vector3> Vertices);
-                    GetNormalBuffer(Primitive, out List<Vector3> Normals);
-                    GetTexCoordBuffer(Primitive, out List<Vector2> Uvs);
-                    Vector3[] vs = Vertices.ToArray();
-                    Vector3[] ns = Normals.ToArray();
-                    Vector2[] uvs = Uvs.ToArray();
-                    GetIndexBuffer(Primitive, out List<(int A, int B, int C)> Indices);
-
-                    //TODO stripify triangles
-
-
-                    foreach (var tri in Indices)
-                    {
-                        g.strips.Add(new strip { triangleCount = 1, vertexOffset = verts.Count });
-                        Vector4 PosC = new Vector4(vs[tri.C].X, vs[tri.C].Y, vs[tri.C].Z, 1);
-                        Vector4 PosB = new Vector4(vs[tri.B].X, vs[tri.B].Y, vs[tri.B].Z, 1);
-                        Vector4 PosA = new Vector4(vs[tri.A].X, vs[tri.A].Y, vs[tri.A].Z, 1);
-                        PosC = Vector4.Transform(PosC, Node.WorldMatrix);
-                        PosB = Vector4.Transform(PosB, Node.WorldMatrix);
-                        PosA = Vector4.Transform(PosA, Node.WorldMatrix);
-                        verts.Add(new Vertex { X = PosC.X, Y = PosC.Y, Z = PosC.Z, NX = ns[tri.C].X, NY = ns[tri.C].Y, NZ = ns[tri.C].Z, U = uvs[tri.C].X, V = uvs[tri.C].Y }.Converted());
-                        verts.Add(new Vertex { X = PosB.X, Y = PosB.Y, Z = PosB.Z, NX = ns[tri.B].X, NY = ns[tri.B].Y, NZ = ns[tri.B].Z, U = uvs[tri.B].X, V = uvs[tri.B].Y }.Converted());
-                        verts.Add(new Vertex { X = PosA.X, Y = PosA.Y, Z = PosA.Z, NX = ns[tri.A].X, NY = ns[tri.A].Y, NZ = ns[tri.A].Z, U = uvs[tri.A].X, V = uvs[tri.A].Y }.Converted());
-                    }
-                    m.geoms.Add(g);
+                    meshes.Add(m);
                 }
-                meshes.Add(m);
             }
 
             return verts;
