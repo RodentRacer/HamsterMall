@@ -695,13 +695,16 @@ namespace HamsterMall
 
                             // Add points in correct order (hopefully)
                             Points.Add(uniquePoint);
-                            if (tri1.C != uniquePoint) {
+                            if (tri1.A == uniquePoint) {
                                 Points.Add(tri1.C);
-                            }
-                            if (tri1.B != uniquePoint) {
                                 Points.Add(tri1.B);
                             }
-                            if (tri1.A != uniquePoint) {
+                            else if (tri1.B == uniquePoint) {
+                                Points.Add(tri1.A);
+                                Points.Add(tri1.C);
+                            }
+                            else if (tri1.C == uniquePoint) {
+                                Points.Add(tri1.B);
                                 Points.Add(tri1.A);
                             }
 
