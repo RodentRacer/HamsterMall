@@ -650,6 +650,7 @@ namespace HamsterMall
                         // OLD WAY
                         //foreach (var tri in Indices)
                         //{
+                        //    Console.WriteLine("creating strip with count " + 1 + " and voffset " + verts.Count);
                         //    g.strips.Add(new strip { triangleCount = 1, vertexOffset = verts.Count });
                         //    Vector4 PosC = new Vector4(vs[tri.C].X, vs[tri.C].Y, vs[tri.C].Z, 1);
                         //    Vector4 PosB = new Vector4(vs[tri.B].X, vs[tri.B].Y, vs[tri.B].Z, 1);
@@ -676,31 +677,77 @@ namespace HamsterMall
                         List<List<int>> strips = StripifyTriangles(Indices);
                         foreach (var strip in strips)
                         {
+                            Console.WriteLine("creating strip with count " + strip.Count + " and voffset " + verts.Count);
                             g.strips.Add(new strip { triangleCount = strip.Count, vertexOffset = verts.Count });
-                            foreach (var triIndex in strip)
+                            // Deal with 1st triangle
+                            var tri1 = Indices[strip[0]];
+
+                            List<int> Points = new List<int>();
+                            int uniquePoint = -1;
+                            if (strip.Count() > 1)
                             {
-                                var tri = Indices[triIndex];
-                                Vector4 PosC = new Vector4(vs[tri.C].X, vs[tri.C].Y, vs[tri.C].Z, 1);
-                                Vector4 PosB = new Vector4(vs[tri.B].X, vs[tri.B].Y, vs[tri.B].Z, 1);
-                                Vector4 PosA = new Vector4(vs[tri.A].X, vs[tri.A].Y, vs[tri.A].Z, 1);
-                                PosC = Vector4.Transform(PosC, Node.WorldMatrix);
-                                PosB = Vector4.Transform(PosB, Node.WorldMatrix);
-                                PosA = Vector4.Transform(PosA, Node.WorldMatrix);
+                                var tri2 = Indices[strip[1]];
+                                uniquePoint = FindUniquePoint(tri2, tri1);
+                            } else
+                            {
+                                uniquePoint = tri1.C;
+                            }
+
+                            // Add points in correct order (hopefully)
+                            Points.Add(uniquePoint);
+                            if (tri1.C != uniquePoint) {
+                                Points.Add(tri1.C);
+                            }
+                            if (tri1.B != uniquePoint) {
+                                Points.Add(tri1.B);
+                            }
+                            if (tri1.A != uniquePoint) {
+                                Points.Add(tri1.A);
+                            }
+
+                            Console.WriteLine("1st tri points:" + String.Join(",", Points));
+
+                            foreach(int p in Points)
+                            {
+                                Vector4 Pos = new Vector4(vs[p].X, vs[p].Y, vs[p].Z, 1);
+                                Pos = Vector4.Transform(Pos, Node.WorldMatrix);
                                 if (texture != null)
                                 {
-                                    verts.Add(new Vertex { X = PosC.X, Y = PosC.Y, Z = PosC.Z, NX = ns[tri.C].X, NY = ns[tri.C].Y, NZ = ns[tri.C].Z, U = uvs[tri.C].X, V = uvs[tri.C].Y }.Converted());
-                                    verts.Add(new Vertex { X = PosB.X, Y = PosB.Y, Z = PosB.Z, NX = ns[tri.B].X, NY = ns[tri.B].Y, NZ = ns[tri.B].Z, U = uvs[tri.B].X, V = uvs[tri.B].Y }.Converted());
-                                    verts.Add(new Vertex { X = PosA.X, Y = PosA.Y, Z = PosA.Z, NX = ns[tri.A].X, NY = ns[tri.A].Y, NZ = ns[tri.A].Z, U = uvs[tri.A].X, V = uvs[tri.A].Y }.Converted());
+                                    verts.Add(new Vertex { X = Pos.X, Y = Pos.Y, Z = Pos.Z, NX = ns[p].X, NY = ns[p].Y, NZ = ns[p].Z, U = uvs[p].X, V = uvs[p].Y }.Converted());
                                 }
                                 else
                                 {
-                                    verts.Add(new Vertex { X = PosC.X, Y = PosC.Y, Z = PosC.Z, NX = ns[tri.C].X, NY = ns[tri.C].Y, NZ = ns[tri.C].Z, U = 1.0f, V = 1.0f }.Converted());
-                                    verts.Add(new Vertex { X = PosB.X, Y = PosB.Y, Z = PosB.Z, NX = ns[tri.B].X, NY = ns[tri.B].Y, NZ = ns[tri.B].Z, U = 1.0f, V = 1.0f }.Converted());
-                                    verts.Add(new Vertex { X = PosA.X, Y = PosA.Y, Z = PosA.Z, NX = ns[tri.A].X, NY = ns[tri.A].Y, NZ = ns[tri.A].Z, U = 1.0f, V = 1.0f }.Converted());
+                                    verts.Add(new Vertex { X = Pos.X, Y = Pos.Y, Z = Pos.Z, NX = ns[p].X, NY = ns[p].Y, NZ = ns[p].Z, U = 1.0f, V = 1.0f }.Converted());
                                 }
+                            }
+
+                            (int A, int B, int C) prevTri = tri1;
+
+                            foreach (var triIndex in strip.Skip(1))
+                            {
+                                Console.WriteLine("adding tri" + triIndex);
+                                var tri = Indices[triIndex];
+                                Console.WriteLine("prev: " + prevTri + " cur: " + tri);
+                                int p = FindUniquePoint(prevTri, tri);
+
+                                Console.WriteLine("p is" + p);
+
+                                Vector4 Pos = new Vector4(vs[p].X, vs[p].Y, vs[p].Z, 1);
+                                Pos = Vector4.Transform(Pos, Node.WorldMatrix);
+                                if (texture != null)
+                                {
+                                    verts.Add(new Vertex { X = Pos.X, Y = Pos.Y, Z = Pos.Z, NX = ns[p].X, NY = ns[p].Y, NZ = ns[p].Z, U = uvs[p].X, V = uvs[p].Y }.Converted());
+                                }
+                                else
+                                {
+                                    verts.Add(new Vertex { X = Pos.X, Y = Pos.Y, Z = Pos.Z, NX = ns[p].X, NY = ns[p].Y, NZ = ns[p].Z, U = 1.0f, V = 1.0f }.Converted());
+                                }
+
+                                prevTri = tri;
                             }
                         }
 
+                        Console.WriteLine("g.strips length: " + g.strips.Count());
                         m.geoms.Add(g);
                     }
                     meshes.Add(m);
@@ -770,6 +817,7 @@ namespace HamsterMall
                 strip.Add(smallestTriangleIndex);
                 remainingTriangles.Remove(smallestTriangleIndex);
 
+                //while (true && strip.Count() < 2)
                 while (true)
                 {
                     int currentTriangle = strip[strip.Count - 1];
@@ -815,6 +863,25 @@ namespace HamsterMall
             }
 
             return strips;
+        }
+
+        // Finds unique point in triangle 2 that is not in triangle 1 and returns it
+        private static int FindUniquePoint((int A, int B, int C) tri1, (int A, int B, int C) tri2)
+        {
+            if (tri2.A != tri1.A && tri2.A != tri1.B && tri2.A != tri1.C)
+            {
+                return tri2.A;
+            }
+            if (tri2.B != tri1.A && tri2.B != tri1.B && tri2.B != tri1.C)
+            {
+                return tri2.B;
+            }
+            if (tri2.C != tri1.A && tri2.C != tri1.B && tri2.C != tri1.C)
+            {
+                return tri2.C;
+            }
+            Console.Error.WriteLine("Could not find unique point!!");
+            return tri2.A;
         }
 
 
